@@ -1,17 +1,20 @@
 package org.prebid.server.spring.dynamic.registry;
 
-import lombok.extern.slf4j.Slf4j;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.vertx.core.logging.Logger;
+import io.vertx.core.logging.LoggerFactory;
 import org.prebid.server.spring.dynamic.CompositePropertyUpdateListener;
 import org.prebid.server.spring.dynamic.PropertyType;
 import org.prebid.server.spring.dynamic.properties.DynamicProperty;
 import org.prebid.server.spring.dynamic.properties.Property;
 
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
-@Slf4j
 public class DynamicPropertyRegistry implements UpdatablePropertyRegistry {
 
+    private static final Logger logger = LoggerFactory.getLogger(DynamicPropertyRegistry.class);
     private static final CompositePropertyUpdateListener<Object> EMPTY_LISTENER =
             new CompositePropertyUpdateListener<>();
 
@@ -40,10 +43,15 @@ public class DynamicPropertyRegistry implements UpdatablePropertyRegistry {
         return getProperty(name, defaultValue, Boolean.class);
     }
 
+    @Override
+    public Property<ObjectNode> getJsonObjectProperty(String name, ObjectNode defaultValue) {
+        return getProperty(name, defaultValue, ObjectNode.class);
+    }
+
     private <T> Property<T> getProperty(String name, T defaultValue, Class<T> clazz) {
         propertyTypes.compute(name, (key, existingType) -> resolveType(key, existingType, PropertyType.from(clazz)));
 
-        final T initial = clazz.cast(properties.computeIfAbsent(name, ignored -> defaultValue));
+        final T initial = clazz.cast(properties.computeIfAbsent(name, ignored -> Objects.requireNonNull(defaultValue)));
         final DynamicProperty<T> property = new DynamicProperty<>(initial);
 
         // We may miss one property update if update comes before we added listener for it
@@ -70,10 +78,15 @@ public class DynamicPropertyRegistry implements UpdatablePropertyRegistry {
             return;
         }
 
+        if (newValue == null) {
+            throw new IllegalArgumentException(
+                    "Trying to update property: %s, with null value, ignoring.".formatted(name));
+        }
+
         final PropertyType type = propertyTypes.get(name);
         if (type == null) {
             throw new IllegalArgumentException(
-                    "Trying to update property: %s, which has not been registered yet, ignoring.");
+                    "Trying to update property: %s, which has not been registered yet, ignoring.".formatted(name));
         }
 
         if (!type.matches(newValue)) {
@@ -88,6 +101,12 @@ public class DynamicPropertyRegistry implements UpdatablePropertyRegistry {
 
     @Override
     public void updateProperties(Map<String, Object> properties) {
-        properties.forEach(this::updateProperty);
+        properties.forEach((key, value) -> {
+            try {
+                updateProperty(key, value);
+            } catch (Exception e) {
+                logger.error(e.getMessage());
+            }
+        });
     }
 }

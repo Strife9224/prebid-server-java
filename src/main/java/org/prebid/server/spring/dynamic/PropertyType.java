@@ -1,10 +1,16 @@
 package org.prebid.server.spring.dynamic;
 
+import com.fasterxml.jackson.databind.node.ObjectNode;
+
 import java.util.Arrays;
 
 public enum PropertyType {
 
-    STRING(String.class), DOUBLE(Double.class), INT(Integer.class), BOOL(Boolean.class);
+    STRING(String.class),
+    DOUBLE(Double.class),
+    INT(Integer.class),
+    BOOL(Boolean.class),
+    JSON_OBJECT(ObjectNode.class);
 
     private final Class<?> propertyClass;
 
